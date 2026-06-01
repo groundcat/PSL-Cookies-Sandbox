@@ -1,0 +1,15 @@
+name = "psl-cookies-sandbox"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[[routes]]
+pattern = "platter-app.dev/*"
+zone_name = "platter-app.dev"
+
+[[routes]]
+pattern = "foo.platter-app.dev/*"
+zone_name = "platter-app.dev"
+
+[[routes]]
+pattern = "bar.platter-app.dev/*"
+zone_name = "platter-app.dev"

@@ -60,21 +60,79 @@ Collapsible accordion explaining:
 
 ## Quick Start
 
-### Prerequisites
-- Node.js 18+
-- A Cloudflare account with a zone for `platter-app.dev`
-
-### Install
 ```bash
 npm install
 ```
 
-### Develop Locally
+## Deploy
+
+### Railway (recommended for quick public hosting)
+
+1. Push this repo to GitHub
+2. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
+3. Select this repo — Railway auto-detects Node.js and runs `node server.js`
+4. Set a custom domain in Railway's settings if desired
+
+Environment variables (all optional):
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Port the server listens on (Railway sets this automatically) |
+| `HOST` | `0.0.0.0` | Bind address |
+
+To get the subdomain cookie isolation experiments working on Railway, you need three separate services (or a reverse-proxy) pointing `platter-app.dev`, `foo.platter-app.dev`, and `bar.platter-app.dev` all to the same Railway deployment.
+
+### Render
+
+Same as Railway — connect the repo, Render detects `npm start` automatically. Set `PORT` if needed (Render injects it).
+
+### Fly.io
+
 ```bash
-npm run dev
+fly launch          # generates fly.toml, detects Node.js
+fly deploy
 ```
 
-Opens `http://localhost:8787` where you can test against the local worker. To use the full subdomain experience, add entries to your `/etc/hosts` (or Windows equivalent):
+### Heroku / Heroku-compatible (e.g. Dokku, Northflank)
+
+The `Procfile` declares `web: node server.js`. Just push to the platform:
+
+```bash
+git push heroku main
+```
+
+### VPS / Docker (any platform)
+
+```bash
+node server.js
+# or with a custom port:
+PORT=8080 node server.js
+```
+
+No build step required — zero runtime dependencies.
+
+### Cloudflare Workers
+
+```bash
+npm run dev       # local preview at http://localhost:8787
+npm run deploy    # deploy to Cloudflare
+```
+
+Requires:
+- `wrangler login`
+- `platter-app.dev` zone in your Cloudflare account
+- DNS records pointing the three domains to the worker
+
+## Local Development
+
+```bash
+# Node.js server (fastest feedback loop)
+npm start                    # http://localhost:3000
+
+# Cloudflare Worker emulation
+npm run dev                  # http://localhost:8787
+```
+
+For the full subdomain experiment experience locally, add to your hosts file:
 
 ```
 127.0.0.1  platter-app.dev
@@ -82,34 +140,25 @@ Opens `http://localhost:8787` where you can test against the local worker. To us
 127.0.0.1  bar.platter-app.dev
 ```
 
-Then open `http://platter-app.dev:8787`, `http://foo.platter-app.dev:8787`, etc.
-
-### Deploy to Cloudflare
-```bash
-npm run deploy
-```
-
-Requires:
-- `wrangler` authenticated: `wrangler login`
-- `platter-app.dev` zone already in your Cloudflare account
-- DNS records (CNAME or A) pointing these domains to the worker
+Then open `http://platter-app.dev:3000`, `http://foo.platter-app.dev:3000`, etc.
 
 ## Architecture
 
-**Single file, zero external dependencies:**
+**Zero runtime dependencies, no build step.**
 
-- `src/index.js` — 500-line worker exports a Cloudflare Worker handler
-  - `fetch()` endpoint handles two types of requests:
-    - `?action=echo-cookies` → returns the server-side `Cookie` header as JSON
-    - everything else → returns the full HTML page
-  - Embedded HTML/CSS/JS uses Bootstrap 5 from CDN (no build step)
-  - JavaScript includes:
-    - PSL knowledge (hardcoded `platter-app.dev` + subdomain logic)
-    - Cookie parsing and manipulation
-    - Server-side echo fetch
-    - Live domain context calculation
+```
+src/app.js      ← shared logic: buildHTML() + parseCookieHeader()
+src/index.js    ← Cloudflare Worker adapter (import from app.js)
+server.js       ← Node.js HTTP server adapter (import from app.js)
+```
 
-**No build step, no runtime dependencies** — just plain JavaScript that runs directly in the Worker.
+Both adapters handle two request types:
+- `?action=echo-cookies` → returns the server-side `Cookie` header as JSON
+- everything else → returns the full HTML page
+
+The HTML is a self-contained page with Bootstrap 5 from CDN. All PSL logic and cookie manipulation runs in the browser via vanilla JavaScript (no template literals — ES5 style to avoid conflicts with the server-side template literal that builds the page).
+
+`"type": "module"` in `package.json` means all `.js` files are ESM, which works for both Node 18+ and Cloudflare Workers.
 
 ## Browser Compatibility
 
@@ -162,12 +211,16 @@ The browser allows cookies set on or inherited from `alice.github.io`, but **nev
 
 ```
 .
-├── README.md                  ← this file
-├── package.json              ← npm scripts (dev, deploy)
-├── wrangler.toml             ← Cloudflare Worker config + routes
-├── .gitignore                ← git ignore patterns
+├── README.md          ← this file
+├── package.json       ← npm scripts, "type": "module", engines
+├── wrangler.toml      ← Cloudflare Worker config + routes
+├── railway.toml       ← Railway deploy config
+├── Procfile           ← Heroku-compatible platforms
+├── .gitignore
+├── server.js          ← Node.js HTTP server (Railway, Render, Fly, VPS)
 └── src/
-    └── index.js              ← single worker file (500 lines)
+    ├── app.js         ← shared: buildHTML() + parseCookieHeader()
+    └── index.js       ← Cloudflare Worker adapter
 ```
 
 ## Security Notes
